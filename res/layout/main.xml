@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent" xmlns:android="http://schemas.android.com/apk/res/android"
+        android:clickable="false">
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Trailblazer"
+            android:id="@+id/title"
+            android:textSize="48dp"
+            android:layout_centerHorizontal="true" android:layout_alignParentTop="true"
+            android:layout_marginTop="92dp"/>
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Siemens Competition 2013"
+            android:id="@+id/subtitle" android:layout_centerHorizontal="true" android:layout_below="@+id/title"/>
+    <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Start"
+            android:id="@+id/run"
+            android:layout_centerHorizontal="true" android:layout_alignParentTop="true"
+            android:layout_marginTop="237dp" android:width="150dp"/>
+    <Button android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Calibrate"
+            android:id="@+id/calibrate"
+            android:layout_centerHorizontal="true" android:layout_below="@+id/run" android:width="150dp"/>
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No errors detected."
+            android:id="@+id/status" android:layout_centerHorizontal="true" android:layout_alignParentTop="true"
+            android:layout_marginTop="435dp"/>
+    <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Exit"
+            android:id="@+id/exit" android:layout_centerHorizontal="true" android:layout_below="@+id/calibrate"
+            android:width="150dp" android:onClick="exitButton"/>
+</RelativeLayout>
