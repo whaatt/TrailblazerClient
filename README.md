@@ -1,4 +1,4 @@
-Trailblazer (Client)
+Trailblazer Client
 =============
 Crowdsourced Mapping Using Smartphones.
 
