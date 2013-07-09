@@ -23,7 +23,7 @@
             android:text="Start"
             android:id="@+id/run"
             android:layout_centerHorizontal="true" android:layout_alignParentTop="true"
-            android:layout_marginTop="237dp" android:width="150dp"/>
+            android:layout_marginTop="237dp" android:width="150dp" android:onClick="startButton"/>
     <Button android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Calibrate"
             android:id="@+id/calibrate"
             android:layout_centerHorizontal="true" android:layout_below="@+id/run" android:width="150dp"/>
