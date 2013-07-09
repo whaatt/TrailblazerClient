@@ -50,7 +50,10 @@ public class StepDetection {
 	private double[] lastComp = new double[] {0.0, 0.0, 0.0};
 	
 	private int round = 0;
-	
+
+    private float[] mGravity;
+    private float[] mGeomagneticField;
+
 	/**
 	 * Handles sensor events. Updates the sensor
 	 */
@@ -63,21 +66,36 @@ public class StepDetection {
 		@Override
 		public void onSensorChanged(SensorEvent event) {
 			switch (event.sensor.getType()) {
-			case Sensor.TYPE_ACCELEROMETER:
-				st.dataHookAcc(System.currentTimeMillis(), event.values[0], event.values[1], event.values[2]);
-				// just update the oldest z value
-				lastAcc[0] = ToolBox.lowpassFilter(lastAcc[0], event.values[0], a);
-				lastAcc[1] = ToolBox.lowpassFilter(lastAcc[1], event.values[1], a);
-				lastAcc[2] = ToolBox.lowpassFilter(lastAcc[2], event.values[2], a);
-				break;
-			case Sensor.TYPE_ORIENTATION:
-				st.dataHookComp(System.currentTimeMillis(), event.values[0], event.values[1], event.values[2]);
-				lastComp[0] = event.values[0];
-				lastComp[1] = event.values[1];
-				lastComp[2] = event.values[2];
-				break;
-			default:
-			}// switch (event.sensor.getType())
+                case Sensor.TYPE_ACCELEROMETER:
+                    st.dataHookAcc(System.currentTimeMillis(), event.values[0], event.values[1], event.values[2]);
+                    mGravity = event.values.clone();
+
+                    // just update the oldest z value
+                    lastAcc[0] = ToolBox.lowpassFilter(lastAcc[0], event.values[0], a);
+                    lastAcc[1] = ToolBox.lowpassFilter(lastAcc[1], event.values[1], a);
+                    lastAcc[2] = ToolBox.lowpassFilter(lastAcc[2], event.values[2], a);
+                    break;
+                case Sensor.TYPE_ORIENTATION: //deprecated in API V8, so no more of this
+                    break;
+                case Sensor.TYPE_MAGNETIC_FIELD:
+                    mGeomagneticField = event.values.clone();
+                    break;
+                default:
+			}
+
+            if (mGravity != null && mGeomagneticField != null){
+                float rotationMatrix[] = new float[16];
+                float orientation[] = new float[3];
+
+                SensorManager.getRotationMatrix(rotationMatrix, null, mGravity, mGeomagneticField);
+                SensorManager.getOrientation(rotationMatrix, orientation);
+
+                lastComp[0] = Math.toDegrees(orientation[0]); //azimuth
+                lastComp[1] = Math.toDegrees(orientation[1]); //pitch
+                lastComp[2] = Math.toDegrees(orientation[2]); //roll
+
+                st.dataHookComp(System.currentTimeMillis(), lastComp[0], lastComp[1], lastComp[2]);
+            }
 		}
 	};
 	
@@ -124,8 +142,8 @@ public class StepDetection {
 		for (int i = 0; i < lSensor.size(); i++) {
 			// Register only compass and accelerometer
 			if (lSensor.get(i).getType() == Sensor.TYPE_ACCELEROMETER
-					|| lSensor.get(i).getType() == Sensor.TYPE_ORIENTATION) {
-				sm.registerListener(mySensorEventListener, lSensor.get(i), SensorManager.SENSOR_DELAY_FASTEST);
+					|| lSensor.get(i).getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+				sm.registerListener(mySensorEventListener, lSensor.get(i), SensorManager.SENSOR_DELAY_GAME);
 			}
 		}
 		

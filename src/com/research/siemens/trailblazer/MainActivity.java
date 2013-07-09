@@ -1,20 +1,25 @@
 package com.research.siemens.trailblazer;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 import de.uvwxy.footpath.core.StepDetection;
 import de.uvwxy.footpath.core.StepTrigger;
+import de.uvwxy.footpath.gui.Calibrator;
 
 public class MainActivity extends Activity implements StepTrigger {
 
-    public static final String CALIBRATION = "CALIBRATION"; //the name of our sharedPreferences file
+    public static final String CALIBRATION = "TrailblazerSettings"; //the name of our sharedPreferences file
 
-    float peak;			// threshold for step detection
-    float alpha;		// value for low pass filter
-    int stepTimeoutM;	// distance in ms between each step
+    float peak;		// threshold for step detection
+    float alpha;    // value for low pass filter
+    int stepTimeoutM;   // distance in ms between each step
+    float stride;   // stride length
 
+    boolean started = false; // check if started
     double initHead = -1;    // note down initial heading
 
     double locX = 0;
@@ -50,17 +55,51 @@ public class MainActivity extends Activity implements StepTrigger {
     }
 
     /**
+     * Called when the calibrate button is clicked.
+     */
+
+    public void calibrateButton(View v) {
+        Intent intent = new Intent(this, Calibrator.class);
+        startActivity(intent);
+    }
+
+    /**
      * Called when the start button is clicked.
      */
 
     public void startButton(View v) {
-        //load settings and create step detector
-        loadSettings();
-        stepDetection = new StepDetection(this, this, alpha, peak, stepTimeoutM);
-        stepDetection.load();
+        if (!started){
+            //load settings and create step detector
+            loadSettings();
+            stepDetection = new StepDetection(this, this, alpha, peak, stepTimeoutM);
+            stepDetection.load();
 
-        TextView status = (TextView) findViewById(R.id.status);
-        status.setText("Waiting for movement.");
+            TextView status = (TextView) findViewById(R.id.status);
+            status.setText("Waiting for movement.");
+
+            Button sButton = (Button) findViewById(R.id.run);
+            sButton.setText("Stop");
+            started = true;
+
+            //reset initial position data
+            initHead = -1;    // note down initial heading
+
+            locX = 0;
+            locY = 0;
+            locZ = 0;
+        }
+
+        else{
+            stepDetection.unload();
+            stepDetection = null;
+            started = false;
+
+            TextView status = (TextView) findViewById(R.id.status);
+            status.setText("No errors detected.");
+
+            Button sButton = (Button) findViewById(R.id.run);
+            sButton.setText("Start");
+        }
     }
 
     /**
@@ -68,9 +107,11 @@ public class MainActivity extends Activity implements StepTrigger {
      */
 
     private void loadSettings(){
-        alpha = getSharedPreferences(CALIBRATION, 0).getFloat("a", 0.5f);
-        peak = getSharedPreferences(CALIBRATION, 0).getFloat("peak", 0.5f);
-        stepTimeoutM = getSharedPreferences(CALIBRATION, 0).getInt("timeout", 666);
+        //0.4, 2, 333, 0.5 are good all-purpose values for calibration
+        alpha = getSharedPreferences(CALIBRATION, 0).getFloat("a", 0.4f);
+        peak = getSharedPreferences(CALIBRATION, 0).getFloat("peak", 1.2f);
+        stepTimeoutM = getSharedPreferences(CALIBRATION, 0).getInt("timeout", 333);
+        stride = getSharedPreferences(CALIBRATION,0).getFloat("stride", 0.5f);
     }
 
     /**
@@ -97,8 +138,8 @@ public class MainActivity extends Activity implements StepTrigger {
         }
 
         double heading = Math.toRadians(compDir - initHead); //heading is relative to original
-        locX += (double) 1 * Math.cos(heading); //lol this says stride length = 1 meter
-        locY += (double) 1 * Math.sin(heading);
+        locX += stride * Math.sin(heading);
+        locY += stride * Math.cos(heading);
 
         TextView status = (TextView) findViewById(R.id.status);
         status.setText("Heading: " + Double.toString(compDir) + "\nTime: " + Long.toString(nowMS)
