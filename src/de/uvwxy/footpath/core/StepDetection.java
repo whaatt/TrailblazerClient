@@ -139,13 +139,13 @@ public class StepDetection {
 		sm = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
 		lSensor = sm.getSensorList(Sensor.TYPE_ALL);
 
-		for (int i = 0; i < lSensor.size(); i++) {
-			// Register only compass and accelerometer
-			if (lSensor.get(i).getType() == Sensor.TYPE_ACCELEROMETER
-					|| lSensor.get(i).getType() == Sensor.TYPE_MAGNETIC_FIELD) {
-				sm.registerListener(mySensorEventListener, lSensor.get(i), SensorManager.SENSOR_DELAY_GAME);
-			}
-		}
+        for (Sensor aLSensor : lSensor) {
+            // Register only compass and accelerometer
+            if (aLSensor.getType() == Sensor.TYPE_ACCELEROMETER
+                    || aLSensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+                sm.registerListener(mySensorEventListener, aLSensor, SensorManager.SENSOR_DELAY_GAME);
+            }
+        }
 		
 		// Register timer
 		timer = new Timer("UpdateData", false);
@@ -217,8 +217,7 @@ public class StepDetection {
 
 		int lookahead = 5;
 		double diff = peakSize;
-		
-		
+
 		for( int t = 1; t <= lookahead; t++){
 			if((values_history[(vhPointer - 1 - t + vhSize + vhSize) % vhSize] - 
 					values_history[(vhPointer - 1 + vhSize) % vhSize]
