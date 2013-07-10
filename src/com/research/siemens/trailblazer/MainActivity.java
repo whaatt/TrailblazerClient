@@ -1,12 +1,21 @@
 package com.research.siemens.trailblazer;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 import de.uvwxy.footpath.core.StepDetection;
@@ -29,6 +38,10 @@ public class MainActivity extends Activity implements StepTrigger {
     public static final String CALIBRATION = "TrailblazerSettings"; // the name of our sharedPreferences file
     public static final String SESSIONS = "sessions.txt"; // where we store loc data
     public static final String SERVER = "http://www.skalon.com/trailblazer/test.php"; // server address
+    public static final int GPS_FREQ = 6000; //GPS update frequency in milliseconds
+
+    // location manager for managing GPS location updates
+    LocationManager locationManager;
 
     float peak;		// threshold for step detection
     float alpha;    // value for low pass filter
@@ -37,14 +50,33 @@ public class MainActivity extends Activity implements StepTrigger {
 
     boolean started = false; // check if started
     boolean stepped = false; // in a given trial, see if a step or reading has been taken
+    boolean dataPause = false; // pause data collection during labeling
+    boolean appIsPausing = false; // check if onPause has been called
+
     double initHead = -1;    // note down initial heading
+    double lastHead = -1;    // save most recent heading
 
     double locX = 0;
     double locY = 0;
     double locZ = 0;
 
+    double latitude = -1;
+    double longitude = -1;
+    float accuracy = -1;
+
+    //turn debug output on or off
+    int devModeClicks = 0;
+    boolean devMode = false;
+
     StepDetection stepDetection; // global step detector
     JSONArray sessionData = new JSONArray(); // store session data
+
+    // power manager instantiations
+    PowerManager pm;
+    PowerManager.WakeLock wl;
+
+    //create a copy of the app context
+    Context thisCopy;
 
     /**
      * Activity life cycle.
@@ -54,14 +86,26 @@ public class MainActivity extends Activity implements StepTrigger {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+
+        //keep screen on
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        //instantiate location manager after onCreate() is called, like you should
+        locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
+
+        //copy context to this
+        thisCopy = this;
     }
 
     protected void onResume() {
         super.onResume();
+        appIsPausing = false;
     }
 
     protected void onPause(){
         super.onPause();
+        appIsPausing = true;
+
         if (started) {
             //java quirk
             try { debrief(); }
@@ -77,6 +121,10 @@ public class MainActivity extends Activity implements StepTrigger {
         Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
     }
 
+    public void makeToast(String message, boolean flag) {
+        Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
+    }
+
     /**
      * Notes on data cache/post cycle (steps 2-4 dispatched from debrief):
      * 1. store readings in JSONObject sessionData (trigger)
@@ -84,6 +132,14 @@ public class MainActivity extends Activity implements StepTrigger {
      * 3. attempt to send readings to server (uploadJSONFile)
      * 4a. if success: blank session.txt, toast (blank, showToast)
      * 4b. if failure: toast (showToast)
+     */
+
+    /**
+     * Notes on JSON event format (these get packaged together and sent to server):
+     * 1. steps look like {'type' : 'relative', 'x' : 123, 'y' : 123, 'time' : 12312, 'heading' : 180}
+     * 2. GPS locations are like {'type' : 'absolute', 'latitude' : 31.41412, 'longitude' : 56.12331,
+     *                          'heading' : 167, 'time' : 12311, 'accuracy' : 12}
+     * 3. labels look like {'type' : 'label', 'content' : 'Room 201', 'time' : 12415}
      */
 
     /**
@@ -95,6 +151,23 @@ public class MainActivity extends Activity implements StepTrigger {
         loadSettings();
         stepDetection = new StepDetection(this, this, alpha, peak, stepTimeoutM);
         stepDetection.load();
+
+        //enable and disable label and calibrate buttons, respectively
+        Button calibrate = (Button) findViewById(R.id.tools);
+        calibrate.setText("Label");
+
+        //make sure screen turn-offs don't impact step detection
+        //pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        //wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TrailOn");
+        //wl.acquire(); //actually start the wake-lock
+
+        //listen to location updates, from network and GPS, but network is pretty inaccurate
+        //locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, locationListener);
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, GPS_FREQ, 0, locationListener);
+
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            gpsAlert();
+        }
 
         TextView status = (TextView) findViewById(R.id.status);
         status.setText("Waiting for movement.");
@@ -109,6 +182,10 @@ public class MainActivity extends Activity implements StepTrigger {
         locX = 0;
         locY = 0;
         locZ = 0;
+
+        latitude = -1;
+        longitude = -1;
+        accuracy = -1;
     }
 
     /**
@@ -120,8 +197,18 @@ public class MainActivity extends Activity implements StepTrigger {
         stepDetection = null;
         started = false;
 
+        //enable and disable label and calibrate buttons, respectively
+        Button label = (Button) findViewById(R.id.tools);
+        label.setText("Calibrate");
+
+        //cancel wake-lock
+        //wl.release();
+
         TextView status = (TextView) findViewById(R.id.status);
         status.setText("No errors detected.");
+
+        //un-register location listener
+        locationManager.removeUpdates(locationListener);
 
         Button sButton = (Button) findViewById(R.id.run);
         sButton.setText("Start");
@@ -142,12 +229,58 @@ public class MainActivity extends Activity implements StepTrigger {
     }
 
     /**
+     * Called when keys are pressed.
+     */
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent e) {
+        switch(keyCode) {
+            case KeyEvent.KEYCODE_MENU:
+                devMode();
+                return true;
+        }
+
+        return super.onKeyDown(keyCode, e);
+    }
+
+    /**
+     * Called when the menu button is clicked.
+     * Enables development mode after four clicks.
+     */
+
+    public void devMode() {
+        if (devModeClicks == 4) {
+            if (devMode) {
+                makeToast("Disabling dev mode.");
+                devMode = false;
+                devModeClicks = 0;
+            }
+
+            else {
+                makeToast("Enabling dev mode.");
+                devMode = true;
+                devModeClicks = 0;
+            }
+        }
+
+        else {
+            devModeClicks++;
+        }
+    }
+
+    /**
      * Called when the calibrate button is clicked.
      */
 
-    public void calibrateButton(View v) {
-        Intent intent = new Intent(this, Calibrator.class);
-        startActivity(intent);
+    public void toolsButton(View v) {
+        if (!started) {
+            Intent intent = new Intent(this, Calibrator.class);
+            startActivity(intent);
+        }
+
+        else {
+            labelAlert();
+        }
     }
 
     /**
@@ -195,6 +328,10 @@ public class MainActivity extends Activity implements StepTrigger {
 
     //Actually handle trigger steps.
     public void onStep(long nowMS, double compDir){
+        if (dataPause){
+            return;
+        }
+
         if (initHead == -1){
             initHead = compDir;
         }
@@ -209,6 +346,7 @@ public class MainActivity extends Activity implements StepTrigger {
         try {
             step.put("time", nowMS);
             step.put("type", "relative");
+            step.put("heading", compDir);
             step.put("x", locX);
             step.put("y", locY);
         }
@@ -219,8 +357,9 @@ public class MainActivity extends Activity implements StepTrigger {
 
         sessionData.put(step); //add step to data object
         TextView status = (TextView) findViewById(R.id.status);
-        status.setText("Heading: " + Double.toString(compDir) + "\nTime: " + Long.toString(nowMS)
-            + "\n\nX: " + Double.toString(locX) + "\nY: " + Double.toString(locY));
+        status.setText("Heading: " + tr(Double.toString(compDir), 3) + "\nX-Axis: " + tr(Double.toString(locX), 5)
+                + "\nY-Axis: " + tr(Double.toString(locY), 5) + "\n\nLat: " + tr(Double.toString(latitude), 7)
+                + "\nLon: " + tr(Double.toString(longitude), 7) + "\nAccuracy: " + Float.toString(accuracy));
     }
 
     @Override
@@ -230,12 +369,122 @@ public class MainActivity extends Activity implements StepTrigger {
 
     @Override
     public void dataHookComp(long now_ms, double x, double y, double z) {
-        //default body
+        lastHead = x; //save compass azimuth reading to last heading
     }
 
     @Override
     public void timedDataHook(long now_ms, double[] acc, double[] comp) {
         //default body
+    }
+
+    /**
+     * Subclass for listening to GPS location updates.
+     */
+
+    // Define a listener that responds to location updates
+    LocationListener locationListener = new LocationListener() {
+        // Called when a new location is found by the network location provider.
+        public void onLocationChanged(Location location) {
+            accuracy = location.getAccuracy();
+            latitude = location.getLatitude();
+            longitude = location.getLongitude();
+
+            JSONObject loc = new JSONObject();
+
+            try {
+                loc.put("time", location.getTime());
+                loc.put("type", "absolute");
+                loc.put("heading", lastHead);
+                loc.put("latitude", latitude);
+                loc.put("longitude", longitude);
+                loc.put("accuracy", accuracy);
+            }
+
+            catch (JSONException e){
+                //just needed so Java/IDEA won't complain
+            }
+
+            sessionData.put(loc); //add step to data object
+        }
+
+        public void onStatusChanged(String provider, int status, Bundle extras) {}
+        public void onProviderEnabled(String provider) {}
+        public void onProviderDisabled(String provider) {}
+    };
+
+    /**
+     * Dialog boxes.
+     */
+
+    private void gpsAlert() {
+        if (dataPause){
+            return;
+        }
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage("Your GPS seems to be disabled; do you want to enable it? " +
+                "Doing so will add context and accuracy to your submitted data.")
+                .setCancelable(false)
+
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                    }
+                })
+
+                .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        dialog.cancel();
+                    }
+                });
+
+        final AlertDialog alert = builder.create();
+        alert.show();
+    }
+
+    private void labelAlert() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+
+        //pause data collection
+        dataPause = true;
+
+        //editable input box
+        final EditText input = new EditText(this);
+
+        builder.setMessage("Please use the following box to set a short but descriptive name" +
+                " for your current location, such as Library, Cafeteria, or Room 201.").setCancelable(false)
+
+                .setPositiveButton("Confirm", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        String content = input.getText().toString();
+                        JSONObject label = new JSONObject();
+
+                        try {
+                            label.put("time", System.currentTimeMillis());
+                            label.put("type", "label");
+                            label.put("content", content);
+                        }
+
+                        catch (JSONException e){
+                            //just needed so Java/IDEA won't complain
+                        }
+
+                        sessionData.put(label); //add step to data object
+                        makeToast("Label added!");
+                        dataPause = false;
+                    }
+                })
+
+                .setNegativeButton("Oops", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        dialog.cancel();
+                        dataPause = false;
+                    }
+                });
+
+        final AlertDialog alert = builder.create();
+        alert.setView(input, 25, 0, 25, 25);
+        alert.show();
     }
 
     /**
@@ -363,6 +612,14 @@ public class MainActivity extends Activity implements StepTrigger {
                 blank(SESSIONS);
                 makeToast("Data successfully uploaded.");
                 makeToast("Thanks for contributing.");
+
+                if (devMode && !appIsPausing){
+                    new AlertDialog.Builder(thisCopy)
+                        .setMessage(out)
+                        .setPositiveButton("Cool", new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface dialog, int which) {}
+                        }).create().show();
+                }
             }
 
             else {
@@ -386,6 +643,24 @@ public class MainActivity extends Activity implements StepTrigger {
         catch (Exception e) {
             e.printStackTrace();
             return false;
+        }
+    }
+
+    /**
+     * Various tools.
+     */
+
+    //truncate string to l chars
+    public String tr(String s, int l){
+        if (s.charAt(0) == '-') { l++; }
+        s = s.substring(0, Math.min(s.length(), l));
+
+        if (s.charAt(s.length() - 1) == '.') {
+            return s.substring(0, s.length() - 1);
+        }
+
+        else {
+            return s;
         }
     }
 }
