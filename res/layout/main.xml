@@ -40,4 +40,10 @@
             android:text="Exit"
             android:id="@+id/exit" android:layout_centerHorizontal="true" android:layout_below="@+id/tools"
             android:width="150dp" android:onClick="exitButton"/>
+    <Button
+            android:layout_width="464dp"
+            android:layout_height="80dp"
+            android:text="Dev Mode"
+            android:id="@+id/devmode" android:layout_centerHorizontal="true" android:layout_alignParentTop="true"
+            android:onClick="devMode" android:layout_alignParentBottom="false" android:background="@android:color/transparent"/>
 </RelativeLayout>

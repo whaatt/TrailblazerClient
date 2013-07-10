@@ -232,7 +232,7 @@ public class MainActivity extends Activity implements StepTrigger {
      * Called when keys are pressed.
      */
 
-    @Override
+    /*@Override
     public boolean onKeyDown(int keyCode, KeyEvent e) {
         switch(keyCode) {
             case KeyEvent.KEYCODE_MENU:
@@ -241,15 +241,15 @@ public class MainActivity extends Activity implements StepTrigger {
         }
 
         return super.onKeyDown(keyCode, e);
-    }
+    }*/
 
     /**
      * Called when the menu button is clicked.
-     * Enables development mode after four clicks.
+     * Enables development mode after nine clicks.
      */
 
-    public void devMode() {
-        if (devModeClicks == 4) {
+    public void devMode(View v) {
+        if (devModeClicks == 9) {
             if (devMode) {
                 makeToast("Disabling dev mode.");
                 devMode = false;
