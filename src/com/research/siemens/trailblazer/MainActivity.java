@@ -10,8 +10,6 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.PowerManager;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -72,8 +70,8 @@ public class MainActivity extends Activity implements StepTrigger {
     JSONArray sessionData = new JSONArray(); // store session data
 
     // power manager instantiations
-    PowerManager pm;
-    PowerManager.WakeLock wl;
+    //PowerManager pm;
+    //PowerManager.WakeLock wl;
 
     //create a copy of the app context
     Context thisCopy;
@@ -217,6 +215,9 @@ public class MainActivity extends Activity implements StepTrigger {
             writeJSONFile(SESSIONS, sessionData);
             new uploadJSONFile().execute(SESSIONS);
             stepped = false; // trial is over
+
+            //reset sessionData after writing to file. Doh!
+            sessionData = new JSONArray();
         }
     }
 
@@ -497,8 +498,8 @@ public class MainActivity extends Activity implements StepTrigger {
         String output;
 
         try {
+            String original = readJSONFile(filename); //do this before?
             outputStream = openFileOutput(filename, Context.MODE_PRIVATE);
-            String original = readJSONFile(filename);
 
             if (!original.equals("IOException")){
                 origJSON = new JSONArray(original);
@@ -525,24 +526,26 @@ public class MainActivity extends Activity implements StepTrigger {
     }
 
     public String readJSONFile(String filename) {
-        String contents = "";
+        String contents;
 
         try {
-            FileInputStream fIn = openFileInput(filename) ;
-            InputStreamReader isr = new InputStreamReader(fIn);
-            BufferedReader bReader = new BufferedReader(isr);
+            FileInputStream in = openFileInput(filename);
+            InputStreamReader inputStreamReader = new InputStreamReader(in);
+            BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
 
-            String readString = bReader.readLine();
-            while (readString != null) {
-                contents = contents + readString ;
-                readString = bReader.readLine();
+            StringBuilder sb = new StringBuilder();
+            String line;
+
+            while ((line = bufferedReader.readLine()) != null) {
+                sb.append(line);
+                sb.append("\n");
             }
 
-            isr.close();
+            contents = sb.toString();
         }
 
-        catch (IOException ioe) {
-            ioe.printStackTrace();
+        catch (IOException e) {
+            e.printStackTrace();
             return "IOException";
         }
 
