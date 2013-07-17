@@ -74,7 +74,7 @@ public class Calibrator extends Activity implements StepTrigger {
 		a = getSharedPreferences(CALIBRATION,0).getFloat("a", 0.4f);
 		peak = getSharedPreferences(CALIBRATION,0).getFloat("peak", 1.2f);
 		step_timeout_ms = getSharedPreferences(CALIBRATION,0).getInt("timeout", 333);
-		stride = getSharedPreferences(CALIBRATION,0).getFloat("stride", 0.5f);
+		stride = getSharedPreferences(CALIBRATION,0).getFloat("stride", 0.74f);
 
 		// Update GUI elements
 		sbPeak.setProgress((int)(peak*10));

@@ -62,6 +62,10 @@ public class MainActivity extends Activity implements StepTrigger {
     double longitude = -1;
     float accuracy = -1;
 
+    String floor; // floor descriptor, like 1 or Basement
+    String startLocation; // starting location for mapping
+    String mapLocation; // record mapping location
+
     //turn debug output on or off
     int devModeClicks = 0;
     boolean devMode = false;
@@ -119,17 +123,15 @@ public class MainActivity extends Activity implements StepTrigger {
         Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
     }
 
-    public void makeToast(String message, boolean flag) {
-        Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
-    }
-
     /**
      * Notes on data cache/post cycle (steps 2-4 dispatched from debrief):
      * 1. store readings in JSONObject sessionData (trigger)
-     * 2. onPause or onStop, append sessionData to session.txt (writeJSONFile)
-     * 3. attempt to send readings to server (uploadJSONFile)
-     * 4a. if success: blank session.txt, toast (blank, showToast)
-     * 4b. if failure: toast (showToast)
+     * 2. onPause or onDestroy, append sessionData to session.txt (writeJSONFile)
+     * 3. prompt user to send readings to server (sendAlert)
+     * 4a. if yes: attempt to send readings to server (uploadJSONFile)
+     * 4aa. if success: blank session.txt, toast (blank, showToast)
+     * 4ab. if failure: toast (showToast)
+     * 4b. if no: do nothing (none)
      */
 
     /**
@@ -138,6 +140,9 @@ public class MainActivity extends Activity implements StepTrigger {
      * 2. GPS locations are like {'type' : 'absolute', 'latitude' : 31.41412, 'longitude' : 56.12331,
      *                          'heading' : 167, 'time' : 12311, 'accuracy' : 12}
      * 3. labels look like {'type' : 'label', 'content' : 'Room 201', 'time' : 12415}
+     * 4. start data looks like {'type' : 'start', 'location' : 'Hunt Library, 'floor' : '1',
+     *                          'start' : 'Front Door', 'calibration' : {'a' : 0.45, 'peak' : 1.2,
+     *                          'timeout' : 333, 'stride' : 0.74}}
      */
 
     /**
@@ -145,8 +150,48 @@ public class MainActivity extends Activity implements StepTrigger {
      */
 
     public void brief() {
-        //load settings and create step detector
+        //load settings
         loadSettings();
+
+        //listen to location updates, from network and GPS, but network is pretty inaccurate
+        //locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, locationListener);
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, GPS_FREQ, 0, locationListener);
+
+        //set default values
+        //if no dialog response given
+
+        if (mapLocation.equals("")){
+            mapLocation = "None";
+        }
+
+        if (floor.equals("")){
+            floor = "None";
+        }
+
+        if (startLocation.equals("")){
+            startLocation = "None";
+        }
+
+        //create object to hold initializing data
+        JSONObject init = new JSONObject();
+
+        try {
+            init.put("type", "start");
+            init.put("location", mapLocation);
+            init.put("floor", floor);
+            init.put("start", startLocation);
+            init.put("calibration", loadSettingsToJSON());
+        }
+
+        catch (JSONException e){
+            //just needed so Java/IDEA won't complain
+        }
+
+        //add initializing data
+        //to session variable
+        sessionData.put(init);
+
+        //create step detection instance and load it
         stepDetection = new StepDetection(this, this, alpha, peak, stepTimeoutM);
         stepDetection.load();
 
@@ -158,14 +203,6 @@ public class MainActivity extends Activity implements StepTrigger {
         //pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         //wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TrailOn");
         //wl.acquire(); //actually start the wake-lock
-
-        //listen to location updates, from network and GPS, but network is pretty inaccurate
-        //locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, locationListener);
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, GPS_FREQ, 0, locationListener);
-
-        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            gpsAlert();
-        }
 
         TextView status = (TextView) findViewById(R.id.status);
         status.setText("Waiting for movement.");
@@ -199,6 +236,11 @@ public class MainActivity extends Activity implements StepTrigger {
         Button label = (Button) findViewById(R.id.tools);
         label.setText("Calibrate");
 
+        //unset these
+        mapLocation = null;
+        floor = null;
+        startLocation = null;
+
         //cancel wake-lock
         //wl.release();
 
@@ -213,7 +255,7 @@ public class MainActivity extends Activity implements StepTrigger {
 
         if (stepped) {
             writeJSONFile(SESSIONS, sessionData);
-            new uploadJSONFile().execute(SESSIONS);
+            sendAlert(); // prompt send
             stepped = false; // trial is over
 
             //reset sessionData after writing to file. Doh!
@@ -290,7 +332,11 @@ public class MainActivity extends Activity implements StepTrigger {
 
     public void startButton(View v){
         if (!started){
-            brief();
+            //dialogs are non-blocking
+            //so we can't just call brief()
+
+            //do it with callbacks
+            setUpDialogs();
         }
 
         else{
@@ -307,7 +353,30 @@ public class MainActivity extends Activity implements StepTrigger {
         alpha = getSharedPreferences(CALIBRATION, 0).getFloat("a", 0.4f);
         peak = getSharedPreferences(CALIBRATION, 0).getFloat("peak", 1.2f);
         stepTimeoutM = getSharedPreferences(CALIBRATION, 0).getInt("timeout", 333);
-        stride = getSharedPreferences(CALIBRATION,0).getFloat("stride", 0.5f);
+        stride = getSharedPreferences(CALIBRATION,0).getFloat("stride", 0.74f);
+    }
+
+    /**
+     * Put calibration settings into a JSON object.
+     */
+
+    private JSONObject loadSettingsToJSON(){
+        //create object to hold calibration data
+        JSONObject settings = new JSONObject();
+
+        try {
+            settings.put("a", alpha);
+            settings.put("peak", peak);
+            settings.put("timeout", stepTimeoutM);
+            settings.put("stride", stride);
+        }
+
+        catch (JSONException e){
+            //just needed so Java/IDEA won't complain
+        }
+
+        //as JSONObject
+        return settings;
     }
 
     /**
@@ -417,11 +486,17 @@ public class MainActivity extends Activity implements StepTrigger {
      * Dialog boxes.
      */
 
-    private void gpsAlert() {
-        if (dataPause){
-            return;
+    private void setUpDialogs(){
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            gpsAlert();
         }
 
+        else {
+            mapAlert(); //jump straight here
+        }
+    }
+
+    private void gpsAlert() {
         final AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setMessage("Your GPS seems to be disabled; do you want to enable it? " +
                 "Doing so will add context and accuracy to your submitted data.")
@@ -436,10 +511,92 @@ public class MainActivity extends Activity implements StepTrigger {
                 .setNegativeButton("No", new DialogInterface.OnClickListener() {
                     public void onClick(final DialogInterface dialog, final int id) {
                         dialog.cancel();
+                        mapAlert();
                     }
                 });
 
         final AlertDialog alert = builder.create();
+        alert.show();
+    }
+
+    private void mapAlert() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+
+        //editable input box
+        final EditText input = new EditText(this);
+
+        builder.setMessage("Please enter the location you are mapping." +
+                " Use a descriptive name, like NCSU Engineering Building II.").setCancelable(false)
+
+                .setPositiveButton("Confirm", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        mapLocation = input.getText().toString();
+                        floorAlert(); // call next in series
+                    }
+                })
+
+                .setNegativeButton("Quit", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        dialog.cancel();
+                    }
+                });
+
+        final AlertDialog alert = builder.create();
+        alert.setView(input, 25, 0, 25, 25);
+        alert.show();
+    }
+
+    private void floorAlert() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+
+        //editable input box
+        final EditText input = new EditText(this);
+
+        builder.setMessage("Please enter the floor you will be mapping. Use the simplest name" +
+                " possible for this purpose, such as 1, 4, 13, or Basement.").setCancelable(false)
+
+                .setPositiveButton("Confirm", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        floor = input.getText().toString();
+                        startAlert(); // call next in series
+                    }
+                })
+
+                .setNegativeButton("Quit", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        dialog.cancel();
+                    }
+                });
+
+        final AlertDialog alert = builder.create();
+        alert.setView(input, 25, 0, 25, 25);
+        alert.show();
+    }
+
+    private void startAlert() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+
+        //editable input box
+        final EditText input = new EditText(this);
+
+        builder.setMessage("Please enter your starting location. Use the most common name" +
+                " for this location, such as Front Door.").setCancelable(false)
+
+                .setPositiveButton("Confirm", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        startLocation = input.getText().toString();
+                        brief(); // all dialogs are finished
+                    }
+                })
+
+                .setNegativeButton("Quit", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        dialog.cancel();
+                    }
+                });
+
+        final AlertDialog alert = builder.create();
+        alert.setView(input, 25, 0, 25, 25);
         alert.show();
     }
 
@@ -485,6 +642,28 @@ public class MainActivity extends Activity implements StepTrigger {
 
         final AlertDialog alert = builder.create();
         alert.setView(input, 25, 0, 25, 25);
+        alert.show();
+    }
+
+    private void sendAlert() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage("Do you want to send all currently saved data? " +
+                "It will be processed according to our disclaimer.")
+                .setCancelable(false)
+
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        new uploadJSONFile().execute(SESSIONS);
+                    }
+                })
+
+                .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        dialog.cancel();
+                    }
+                });
+
+        final AlertDialog alert = builder.create();
         alert.show();
     }
 
