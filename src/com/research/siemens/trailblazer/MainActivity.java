@@ -10,6 +10,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -30,12 +31,14 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.*;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 public class MainActivity extends Activity implements StepTrigger {
 
     public static final String CALIBRATION = "TrailblazerSettings"; // the name of our sharedPreferences file
     public static final String SESSIONS = "sessions.txt"; // where we store loc data
-    public static final String SERVER = "http://www.skalon.com/trailblazer/test.php"; // server address
+    public static final String SERVER = "http://www.skalon.com/trailblazer/server.php"; // server address
     public static final int GPS_FREQ = 6000; //GPS update frequency in milliseconds
 
     // location manager for managing GPS location updates
@@ -177,6 +180,7 @@ public class MainActivity extends Activity implements StepTrigger {
 
         try {
             init.put("type", "start");
+            init.put("id", getDeviceIDHash());
             init.put("location", mapLocation);
             init.put("floor", floor);
             init.put("start", startLocation);
@@ -843,6 +847,32 @@ public class MainActivity extends Activity implements StepTrigger {
 
         else {
             return s;
+        }
+    }
+
+    //get ANDROID_ID of device
+    public String getDeviceIDHash(){
+        String androidID = Settings.Secure.getString(thisCopy.getContentResolver(), Settings.Secure.ANDROID_ID);
+
+        try {
+            MessageDigest sha = MessageDigest.getInstance("SHA-512");
+            sha.update(androidID.getBytes());
+
+            byte[] bytes = sha.digest();
+            StringBuilder buffer = new StringBuilder();
+
+            for (byte aByte : bytes) {
+                String tmp = Integer.toString((aByte & 0xff) + 0x100, 16).substring(1);
+                buffer.append(tmp);
+            }
+
+            return buffer.toString();
+        }
+
+        catch (NoSuchAlgorithmException e) {
+            //128 bit hash, so 128 zeroes
+            String zeroes = "00000000000000000000000000000000";
+            return zeroes + zeroes + zeroes + zeroes; //zeroes!
         }
     }
 }
