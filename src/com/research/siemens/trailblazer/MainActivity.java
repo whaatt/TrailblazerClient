@@ -61,6 +61,10 @@ public class MainActivity extends Activity implements StepTrigger {
     double locY = 0;
     double locZ = 0;
 
+    double absLocX = 0;
+    double absLocY = 0;
+    double absLocZ = 0;
+
     double latitude = -1;
     double longitude = -1;
     float accuracy = -1;
@@ -221,6 +225,10 @@ public class MainActivity extends Activity implements StepTrigger {
         locX = 0;
         locY = 0;
         locZ = 0;
+
+        absLocX = 0;
+        absLocY = 0;
+        absLocZ = 0;
 
         latitude = -1;
         longitude = -1;
@@ -411,8 +419,13 @@ public class MainActivity extends Activity implements StepTrigger {
         }
 
         double heading = Math.toRadians(compDir - initHead); //heading is relative to original
+        double absHeading = Math.toRadians(compDir); //heading is relative to compass directions
+
         locX += stride * Math.sin(heading);
         locY += stride * Math.cos(heading);
+
+        absLocX += stride * Math.sin(absHeading);
+        absLocY += stride * Math.cos(absHeading);
 
         JSONObject step = new JSONObject();
         stepped = true; // step has been taken
@@ -423,6 +436,8 @@ public class MainActivity extends Activity implements StepTrigger {
             step.put("heading", compDir);
             step.put("x", locX);
             step.put("y", locY);
+            step.put("absX", absLocX);
+            step.put("absY", absLocY);
         }
 
         catch (JSONException e){
