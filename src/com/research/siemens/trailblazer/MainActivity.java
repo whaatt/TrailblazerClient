@@ -38,7 +38,7 @@ public class MainActivity extends Activity implements StepTrigger {
 
     public static final String CALIBRATION = "TrailblazerSettings"; // the name of our sharedPreferences file
     public static final String SESSIONS = "sessions.txt"; // where we store loc data
-    public static final String SERVER = "http://www.skalon.com/trailblazer/server.php"; // server address
+    public static final String SERVER = "http://www.skalon.com/trailblazer/store.php"; // server address
     public static final int GPS_FREQ = 6000; //GPS update frequency in milliseconds
 
     // location manager for managing GPS location updates
@@ -143,13 +143,28 @@ public class MainActivity extends Activity implements StepTrigger {
 
     /**
      * Notes on JSON event format (these get packaged together and sent to server):
-     * 1. steps look like {'type' : 'relative', 'x' : 123, 'y' : 123, 'time' : 12312, 'heading' : 180}
+     * 1. steps look like {'type' : 'relative', 'x' : 123, 'y' : 123, 'absX' : 0,
+     *                      'absY' : 174, 'time' : 12312, 'heading' : 180}
      * 2. GPS locations are like {'type' : 'absolute', 'latitude' : 31.41412, 'longitude' : 56.12331,
      *                          'heading' : 167, 'time' : 12311, 'accuracy' : 12}
      * 3. labels look like {'type' : 'label', 'content' : 'Room 201', 'time' : 12415}
-     * 4. start data looks like {'type' : 'start', 'location' : 'Hunt Library, 'floor' : '1',
+     * 4. start data looks like {'type' : 'start', 'client' : HASH, 'location' : 'Hunt Library, 'floor' : '1',
      *                          'start' : 'Front Door', 'calibration' : {'a' : 0.45, 'peak' : 1.2,
      *                          'timeout' : 333, 'stride' : 0.74}}
+     */
+
+    /**
+     * In a given session, an event with type
+     * start should always precede all other
+     * events for the session to be recognized.
+     *
+     * For most string variables, the server will
+     * enforce a Twitter-like 140 character limit
+     * in order to avoid malicious or spam data.
+     *
+     * Also, JSON technically requires double
+     * quotes, but for clarity and aesthetics,
+     * we are using single quotes here.
      */
 
     /**
@@ -184,7 +199,7 @@ public class MainActivity extends Activity implements StepTrigger {
 
         try {
             init.put("type", "start");
-            init.put("id", getDeviceIDHash());
+            init.put("client", getDeviceIDHash());
             init.put("location", mapLocation);
             init.put("floor", floor);
             init.put("start", startLocation);
