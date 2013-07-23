@@ -131,14 +131,15 @@ public class MainActivity extends Activity implements StepTrigger {
     }
 
     /**
-     * Notes on data cache/post cycle (steps 2-4 dispatched from debrief):
+     * Notes on data cache/post cycle (steps 2-4 dispatched from debrief or alerts):
      * 1. store readings in JSONObject sessionData (trigger)
      * 2. onPause or onDestroy, append sessionData to session.txt (writeJSONFile)
-     * 3. prompt user to send readings to server (sendAlert)
-     * 4a. if yes: attempt to send readings to server (uploadJSONFile)
-     * 4aa. if success: blank session.txt, toast (blank, showToast)
-     * 4ab. if failure: toast (showToast)
-     * 4b. if no: do nothing (none)
+     * 3. prompt user to keep readings from trial (saveAlert)
+     * 4. prompt user to send readings to server (sendAlert)
+     * 5a. if yes: attempt to send readings to server (uploadJSONFile)
+     * 5aa. if success: blank session.txt, toast (blank, showToast)
+     * 5ab. if failure: toast (showToast)
+     * 5b. if no: do nothing (none)
      */
 
     /**
@@ -281,12 +282,8 @@ public class MainActivity extends Activity implements StepTrigger {
         sButton.setText("Start");
 
         if (stepped) {
-            writeJSONFile(SESSIONS, sessionData);
-            sendAlert(); // prompt send
+            saveAlert(); // step three
             stepped = false; // trial is over
-
-            //reset sessionData after writing to file. Doh!
-            sessionData = new JSONArray();
         }
     }
 
@@ -676,6 +673,36 @@ public class MainActivity extends Activity implements StepTrigger {
 
         final AlertDialog alert = builder.create();
         alert.setView(input, 25, 0, 25, 25);
+        alert.show();
+    }
+
+    private void saveAlert() {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage("Do you want to keep the current trial? " +
+                "All saved trials will eventually be uploaded to the server.")
+                .setCancelable(false)
+
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        writeJSONFile(SESSIONS, sessionData);
+                        sendAlert(); // prompt send
+
+                        //reset sessionData after write
+                        sessionData = new JSONArray();
+                    }
+                })
+
+                .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                    public void onClick(final DialogInterface dialog, final int id) {
+                        //reset sessionData to blank
+                        sessionData = new JSONArray();
+
+                        //hide dialog
+                        dialog.cancel();
+                    }
+                });
+
+        final AlertDialog alert = builder.create();
         alert.show();
     }
 
