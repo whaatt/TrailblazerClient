@@ -249,6 +249,27 @@ public class MainActivity extends Activity implements StepTrigger {
         latitude = -1;
         longitude = -1;
         accuracy = -1;
+
+        //create object for fake origin step
+        //all location variables should be zero
+        JSONObject step = new JSONObject();
+
+        try {
+            step.put("time", System.currentTimeMillis());
+            step.put("type", "relative");
+            step.put("heading", initHead);
+            step.put("x", locX);
+            step.put("y", locY);
+            step.put("absX", absLocX);
+            step.put("absY", absLocY);
+        }
+
+        catch (JSONException e){
+            //just needed so Java/IDEA won't complain
+        }
+
+        //add fake step to data
+        sessionData.put(step);
     }
 
     /**
